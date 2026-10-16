@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
-import api from '../services/api';
+import api, { downloadFile } from '../services/api';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
 import { FileText, Download } from 'lucide-react';
 
 export default function Reports() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -20,6 +21,17 @@ export default function Reports() {
     };
     fetchData();
   }, []);
+
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile('/export/donations', `iskcon_donations_report_${new Date().toISOString().split('T')[0]}.csv`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to export donations CSV');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   if (loading) {
     return <div className="flex h-full items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-saffron-600"></div></div>;
@@ -48,11 +60,12 @@ export default function Reports() {
           <p className="text-sm text-gray-500 mt-1">Overview of system data and distribution.</p>
         </div>
         <button 
-          onClick={() => window.open('http://localhost:5000/api/export/donations', '_blank')}
-          className="flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-medium"
+          onClick={handleExport}
+          disabled={exporting}
+          className="flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-medium disabled:opacity-70"
         >
-          <Download size={16} className="mr-2" />
-          Export All Donations (CSV)
+          <Download size={16} className="mr-2 text-saffron-600" />
+          {exporting ? 'Exporting...' : 'Export All Donations (CSV)'}
         </button>
       </div>
 

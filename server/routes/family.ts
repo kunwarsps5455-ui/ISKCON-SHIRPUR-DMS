@@ -6,27 +6,75 @@ import { logAudit } from '../middleware/audit.js';
 const router = Router();
 router.use(authenticate);
 
+// Get all family members (with donor info)
+router.get('/', async (req, res) => {
+  try {
+    const skip = parseInt(req.query.skip as string) || 0;
+    const take = parseInt(req.query.take as string) || 50;
+    const search = req.query.search as string;
+
+    let whereClause: any = {};
+    
+    if (search) {
+      whereClause = {
+        OR: [
+          { fullName: { contains: search } },
+          { mobile: { contains: search } },
+          { donor: { fullName: { contains: search } } }
+        ]
+      };
+    }
+
+    const family = await prisma.familyMember.findMany({
+      where: whereClause,
+      skip,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        donor: {
+          select: { fullName: true, donorId: true }
+        }
+      }
+    });
+
+    const total = await prisma.familyMember.count({ where: whereClause });
+    res.json({ data: family, total, skip, take });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch family members' });
+  }
+});
+
 // Create Family Member (Admin only)
 router.post('/donor/:donorId', requireAdmin, logAudit('CREATE_FAMILY_MEMBER', 'FamilyMember'), async (req: AuthRequest, res) => {
   try {
-    const { donorId } = req.params;
-    const { fullName, relationship, dob, mobile, email, smsPermission, notes } = req.body;
+    const donorId = String(req.params.donorId);
+    const { fullName, relationship, dob, mobile, email, whatsappPermission, smsPermission, notes } = req.body;
+
+    if (!fullName || typeof fullName !== 'string' || !fullName.trim() || !relationship || typeof relationship !== 'string' || !relationship.trim()) {
+      return res.status(400).json({ error: 'Family member full name and relationship are required' });
+    }
+
+    const donorExists = await prisma.donor.findUnique({ where: { id: donorId } });
+    if (!donorExists) {
+      return res.status(404).json({ error: 'Donor not found' });
+    }
 
     const newFamilyMember = await prisma.familyMember.create({
       data: {
         donorId,
-        fullName,
-        relationship,
+        fullName: fullName.trim(),
+        relationship: relationship.trim(),
         dob: dob ? new Date(dob) : null,
         mobile,
         email,
+        whatsappPermission: whatsappPermission === 'NOT_ALLOWED' ? 'NOT_ALLOWED' : 'ALLOWED',
         smsPermission: smsPermission || 'UNKNOWN',
         notes
       }
     });
 
     res.locals.entityId = newFamilyMember.id;
-    res.locals.auditNewData = { fullName, relationship, donorId };
+    res.locals.auditNewData = { fullName, relationship, donorId, whatsappPermission: newFamilyMember.whatsappPermission };
 
     res.status(201).json(newFamilyMember);
   } catch (error) {
@@ -37,20 +85,22 @@ router.post('/donor/:donorId', requireAdmin, logAudit('CREATE_FAMILY_MEMBER', 'F
 // Update Family Member (Admin only)
 router.put('/:id', requireAdmin, logAudit('UPDATE_FAMILY_MEMBER', 'FamilyMember'), async (req: AuthRequest, res) => {
   try {
-    const oldFamilyMember = await prisma.familyMember.findUnique({ where: { id: req.params.id } });
+    const id = String(req.params.id);
+    const oldFamilyMember = await prisma.familyMember.findUnique({ where: { id } });
     if (!oldFamilyMember) return res.status(404).json({ error: 'Family member not found' });
 
-    const { fullName, relationship, dob, mobile, email, smsPermission, status, notes } = req.body;
+    const { fullName, relationship, dob, mobile, email, whatsappPermission, smsPermission, status, notes } = req.body;
 
     const updated = await prisma.familyMember.update({
-      where: { id: req.params.id },
+      where: { id },
       data: {
         fullName,
         relationship,
         dob: dob ? new Date(dob) : null,
         mobile,
         email,
-        smsPermission,
+        ...(whatsappPermission !== undefined && { whatsappPermission }),
+        ...(smsPermission !== undefined && { smsPermission }),
         status,
         notes
       }
@@ -62,6 +112,27 @@ router.put('/:id', requireAdmin, logAudit('UPDATE_FAMILY_MEMBER', 'FamilyMember'
     res.json(updated);
   } catch (error) {
     res.status(500).json({ error: 'Failed to update family member' });
+  }
+});
+
+// Quick 1-click toggle for messaging permission on individual family member
+router.patch('/:id/messaging-permission', requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.params.id);
+    const { whatsappPermission } = req.body;
+    const current = await prisma.familyMember.findUnique({ where: { id } });
+    if (!current) return res.status(404).json({ error: 'Family member not found' });
+
+    const newPermission = whatsappPermission || (current.whatsappPermission === 'ALLOWED' ? 'NOT_ALLOWED' : 'ALLOWED');
+
+    const updated = await prisma.familyMember.update({
+      where: { id },
+      data: { whatsappPermission: newPermission }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to toggle messaging permission' });
   }
 });
 

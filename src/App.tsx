@@ -12,6 +12,7 @@ import Users from './pages/Users';
 import Settings from './pages/Settings';
 import Donations from './pages/Donations';
 import Family from './pages/Family';
+import Crm from './pages/Crm';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -29,6 +30,7 @@ function App() {
         {/* Protected Routes */}
         <Route path="/" element={<Navigate to="/dashboard" />} />
         <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+        <Route path="/crm" element={<ProtectedRoute><Crm /></ProtectedRoute>} />
         <Route path="/donors" element={<ProtectedRoute><Donors /></ProtectedRoute>} />
         <Route path="/donors/new" element={<ProtectedRoute><DonorForm /></ProtectedRoute>} />
         <Route path="/donors/:id" element={<ProtectedRoute><DonorProfile /></ProtectedRoute>} />

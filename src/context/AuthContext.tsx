@@ -12,7 +12,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (data: any) => void;
+  login: (userData: User, token?: string) => void;
   logout: () => void;
 }
 
@@ -51,7 +51,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const login = (userData: User) => {
+  const login = (userData: User, token?: string) => {
+    if (token) {
+      localStorage.setItem('token', token);
+    }
     setUser(userData);
     navigate('/dashboard');
   };
@@ -62,6 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error) {
       console.error(error);
     }
+    localStorage.removeItem('token');
     setUser(null);
     navigate('/login');
   };

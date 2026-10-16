@@ -2,16 +2,34 @@ import { Router } from 'express';
 import { prisma } from '../db.js';
 import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
 import { logAudit } from '../middleware/audit.js';
+import { dispatchWhatsAppReceipt, generateNextDonationId } from './donations.js';
 
 const router = Router();
 router.use(authenticate);
+
+export async function generateNextDonorId(): Promise<string> {
+  const latest = await prisma.donor.findFirst({
+    orderBy: { donorId: 'desc' },
+    select: { donorId: true }
+  });
+  let nextNum = 1;
+  if (latest?.donorId) {
+    const match = latest.donorId.match(/ISK-(\d+)/);
+    if (match) {
+      nextNum = parseInt(match[1], 10) + 1;
+    }
+  }
+  const totalCount = await prisma.donor.count();
+  if (totalCount + 1 > nextNum) nextNum = totalCount + 1;
+  return `ISK-${String(nextNum).padStart(6, '0')}`;
+}
 
 // Get all donors (with search & filters)
 router.get('/', async (req, res) => {
   try {
     const { search, category, status } = req.query;
-    const skip = parseInt(req.query.skip as string) || 0;
-    const take = parseInt(req.query.take as string) || 25;
+    const skip = Math.max(0, parseInt(req.query.skip as string) || 0);
+    const take = Math.max(1, parseInt(req.query.take as string) || 25);
 
     let whereClause: any = {};
     
@@ -31,8 +49,6 @@ router.get('/', async (req, res) => {
 
     const donors = await prisma.donor.findMany({
       where: whereClause,
-      skip,
-      take,
       orderBy: { createdAt: 'desc' },
       include: {
         donations: {
@@ -42,20 +58,24 @@ router.get('/', async (req, res) => {
       }
     });
 
-    const total = await prisma.donor.count({ where: whereClause });
-
-    // Calculate total contribution and category dynamically for list view
-    const enrichedDonors = donors.map(donor => {
+    // Calculate total contribution and category dynamically for list view before filtering/pagination
+    let allEnrichedDonors = donors.map(donor => {
       const totalDonation = donor.donations.reduce((sum, d) => sum + d.amount, 0);
       let calcCategory = 'SUDAMA';
       if (totalDonation >= 1000000) calcCategory = 'PLATINUM';
       else if (totalDonation >= 500000) calcCategory = 'GOLD';
       else if (totalDonation >= 100000) calcCategory = 'SILVER';
 
-      // Remove donations array to save bandwidth if not needed
       const { donations, ...rest } = donor;
       return { ...rest, totalDonation, category: calcCategory };
     });
+
+    if (category && category !== 'ALL') {
+      allEnrichedDonors = allEnrichedDonors.filter(d => d.category === category);
+    }
+
+    const total = allEnrichedDonors.length;
+    const enrichedDonors = allEnrichedDonors.slice(skip, skip + take);
 
     res.json({ data: enrichedDonors, total, skip, take });
   } catch (error) {
@@ -66,8 +86,9 @@ router.get('/', async (req, res) => {
 // Get single donor
 router.get('/:id', async (req, res) => {
   try {
+    const id = String(req.params.id);
     const donor = await prisma.donor.findUnique({
-      where: { id: req.params.id },
+      where: { id },
       include: {
         donations: {
           where: { status: 'VALID' },
@@ -96,16 +117,22 @@ router.get('/:id', async (req, res) => {
 // Create Donor (Admin only)
 router.post('/', requireAdmin, logAudit('CREATE_DONOR', 'Donor'), async (req: AuthRequest, res) => {
   try {
-    const { fullName, dob, gender, mobile, email, address, city, state, pincode, smsPermission, notes } = req.body;
+    const { 
+      fullName, dob, gender, mobile, email, address, city, state, pincode, 
+      stage, preferredChannel, whatsappPermission, smsPermission, notes,
+      initialAmount, initialPaymentMethod, initialPurpose, initialTransactionRef, sendReceiptNow = true
+    } = req.body;
+
+    if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
+      return res.status(400).json({ error: 'Donor full name is required' });
+    }
     
-    // Generate Donor ID
-    const count = await prisma.donor.count();
-    const donorId = `ISK-${String(count + 1).padStart(6, '0')}`;
+    const donorId = await generateNextDonorId();
 
     const newDonor = await prisma.donor.create({
       data: {
         donorId,
-        fullName,
+        fullName: fullName.trim(),
         dob: dob ? new Date(dob) : null,
         gender,
         mobile,
@@ -114,17 +141,68 @@ router.post('/', requireAdmin, logAudit('CREATE_DONOR', 'Donor'), async (req: Au
         city,
         state,
         pincode,
+        stage: stage || 'REGULAR',
+        preferredChannel: preferredChannel || 'WHATSAPP',
+        whatsappPermission: whatsappPermission || 'ALLOWED',
         smsPermission: smsPermission || 'UNKNOWN',
         notes,
         createdBy: req.user!.id
       }
     });
 
+    // Optionally record initial donation immediately if amount is provided
+    let initialDonationRecord: any = null;
+    const parsedAmount = initialAmount ? parseFloat(String(initialAmount)) : 0;
+
+    if (Number.isFinite(parsedAmount) && parsedAmount > 0) {
+      const donationId = await generateNextDonationId();
+
+      initialDonationRecord = await prisma.donation.create({
+        data: {
+          donationId,
+          donorId: newDonor.id,
+          amount: parsedAmount,
+          donationDate: new Date(),
+          paymentMethod: initialPaymentMethod || 'UPI',
+          transactionReference: initialTransactionRef || null,
+          purpose: initialPurpose || 'Temple Deity Seva & Annadanam',
+          notes: 'Opening contribution recorded during devotee registration',
+          createdBy: req.user!.id
+        }
+      });
+
+      // Advance stage to FIRST_TIME if prospect
+      if (newDonor.stage === 'PROSPECT') {
+        await prisma.donor.update({
+          where: { id: newDonor.id },
+          data: { stage: 'FIRST_TIME' }
+        }).catch(() => {});
+      }
+
+      const autoReceiptSetting = await prisma.systemSetting.findUnique({ where: { key: 'AUTO_RECEIPT_ENABLED' } });
+      const isAutoReceiptGlobalEnabled = autoReceiptSetting ? autoReceiptSetting.value !== 'false' : true;
+
+      // Automatically dispatch WhatsApp seva receipt if permitted and enabled
+      if (sendReceiptNow && isAutoReceiptGlobalEnabled && newDonor.mobile && newDonor.whatsappPermission !== 'NOT_ALLOWED') {
+        const waResult = await dispatchWhatsAppReceipt(newDonor, initialDonationRecord);
+        if (waResult.sent) {
+          initialDonationRecord = await prisma.donation.update({
+            where: { id: initialDonationRecord.id },
+            data: { receiptSent: true, receiptChannel: 'WHATSAPP' }
+          }).catch(() => initialDonationRecord);
+        }
+      }
+    }
+
     res.locals.entityId = newDonor.id;
-    res.locals.auditNewData = { fullName, mobile, donorId };
+    res.locals.auditNewData = { fullName, mobile, donorId, initialAmount: parsedAmount };
     
-    res.status(201).json(newDonor);
+    res.status(201).json({
+      ...newDonor,
+      initialDonation: initialDonationRecord
+    });
   } catch (error) {
+    console.error('Failed to create donor:', error);
     res.status(500).json({ error: 'Failed to create donor' });
   }
 });
@@ -132,15 +210,20 @@ router.post('/', requireAdmin, logAudit('CREATE_DONOR', 'Donor'), async (req: Au
 // Update Donor (Admin only)
 router.put('/:id', requireAdmin, logAudit('UPDATE_DONOR', 'Donor'), async (req: AuthRequest, res) => {
   try {
-    const oldDonor = await prisma.donor.findUnique({ where: { id: req.params.id } });
+    const id = String(req.params.id);
+    const oldDonor = await prisma.donor.findUnique({ where: { id } });
     if (!oldDonor) return res.status(404).json({ error: 'Donor not found' });
 
-    const { fullName, dob, gender, mobile, email, address, city, state, pincode, smsPermission, notes } = req.body;
+    const { fullName, dob, gender, mobile, email, address, city, state, pincode, stage, preferredChannel, whatsappPermission, smsPermission, notes } = req.body;
+
+    if (fullName !== undefined && (!fullName || typeof fullName !== 'string' || !fullName.trim())) {
+      return res.status(400).json({ error: 'Donor full name cannot be empty' });
+    }
 
     const updated = await prisma.donor.update({
-      where: { id: req.params.id },
+      where: { id },
       data: {
-        fullName,
+        ...(fullName !== undefined && { fullName: fullName.trim() }),
         dob: dob ? new Date(dob) : null,
         gender,
         mobile,
@@ -149,7 +232,10 @@ router.put('/:id', requireAdmin, logAudit('UPDATE_DONOR', 'Donor'), async (req: 
         city,
         state,
         pincode,
-        smsPermission,
+        ...(stage !== undefined && { stage }),
+        ...(preferredChannel !== undefined && { preferredChannel }),
+        ...(whatsappPermission !== undefined && { whatsappPermission }),
+        ...(smsPermission !== undefined && { smsPermission }),
         notes
       }
     });

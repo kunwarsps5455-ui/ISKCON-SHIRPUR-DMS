@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import api from '../services/api';
-import { Search, Plus, Filter, Download, Upload } from 'lucide-react';
+import api, { downloadFile } from '../services/api';
+import { Search, Plus, Download, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRef } from 'react';
 
@@ -10,13 +10,18 @@ export default function Donors() {
   const [donors, setDonors] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
+  const [exporting, setExporting] = useState(false);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchDonors = async () => {
     setLoading(true);
     try {
-      const res = await api.get('/donors', { params: { search } });
+      const params: any = {};
+      if (search) params.search = search;
+      if (categoryFilter !== 'ALL') params.category = categoryFilter;
+      const res = await api.get('/donors', { params });
       setDonors(res.data.data);
     } catch (error) {
       console.error("Failed to fetch donors");
@@ -28,9 +33,9 @@ export default function Donors() {
   useEffect(() => {
     const delayDebounceFn = setTimeout(() => {
       fetchDonors();
-    }, 500);
+    }, 400);
     return () => clearTimeout(delayDebounceFn);
-  }, [search]);
+  }, [search, categoryFilter]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
@@ -46,8 +51,15 @@ export default function Donors() {
     }
   };
 
-  const handleExport = () => {
-    window.open('http://localhost:5000/api/export/donors', '_blank');
+  const handleExport = async () => {
+    setExporting(true);
+    try {
+      await downloadFile('/export/donors', `iskcon_donors_${new Date().toISOString().split('T')[0]}.csv`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to export donors CSV');
+    } finally {
+      setExporting(false);
+    }
   };
 
   const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -91,21 +103,22 @@ export default function Donors() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
-              className="flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-70"
+              className="flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm disabled:opacity-70 text-sm font-medium"
             >
               <Upload size={18} className="mr-2" />
               {uploading ? 'Uploading...' : 'Import CSV'}
             </button>
             <button
               onClick={handleExport}
-              className="flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm"
+              disabled={exporting}
+              className="flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors shadow-sm text-sm font-medium disabled:opacity-70"
             >
               <Download size={18} className="mr-2" />
-              Export CSV
+              {exporting ? 'Exporting...' : 'Export CSV'}
             </button>
             <Link
               to="/donors/new"
-              className="flex items-center px-4 py-2 bg-saffron-600 text-white rounded-lg hover:bg-saffron-700 transition-colors shadow-sm"
+              className="flex items-center px-4 py-2 bg-saffron-600 text-white rounded-lg hover:bg-saffron-700 transition-colors shadow-sm text-sm font-medium"
             >
               <Plus size={18} className="mr-2" />
               Add Donor
@@ -114,8 +127,8 @@ export default function Donors() {
         )}
       </div>
 
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-4 items-center justify-between">
-        <div className="relative w-full sm:max-w-md">
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full md:max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
           <input
             type="text"
@@ -125,10 +138,23 @@ export default function Donors() {
             className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-saffron-500"
           />
         </div>
-        <button className="flex items-center px-4 py-2 border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
-          <Filter size={18} className="mr-2" />
-          Filters
-        </button>
+
+        <div className="flex items-center space-x-2 w-full md:w-auto justify-end overflow-x-auto pb-1 md:pb-0">
+          <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider mr-1">Category:</span>
+          {['ALL', 'PLATINUM', 'GOLD', 'SILVER', 'SUDAMA'].map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategoryFilter(cat)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                categoryFilter === cat
+                  ? 'bg-saffron-600 text-white shadow-xs font-semibold'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {cat === 'ALL' ? 'All Categories' : cat}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">

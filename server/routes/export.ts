@@ -8,7 +8,7 @@ router.use(authenticate);
 router.use(requireAdmin);
 
 // Export Donors
-router.get('/donors', async (req, res) => {
+router.get('/donors', async (_req, res) => {
   try {
     const donors = await prisma.donor.findMany({
       include: {
@@ -49,7 +49,7 @@ router.get('/donors', async (req, res) => {
 });
 
 // Export Donations
-router.get('/donations', async (req, res) => {
+router.get('/donations', async (_req, res) => {
   try {
     const donations = await prisma.donation.findMany({
       include: { donor: true }
@@ -76,7 +76,7 @@ router.get('/donations', async (req, res) => {
 });
 
 // Export Birthdays (Messages)
-router.get('/birthdays', async (req, res) => {
+router.get('/birthdays', async (_req, res) => {
   try {
     const messages = await prisma.birthdayMessage.findMany({
       orderBy: { createdAt: 'desc' }

@@ -6,7 +6,7 @@ const router = Router();
 router.use(authenticate);
 
 // Get Dashboard Summary
-router.get('/dashboard', async (req, res) => {
+router.get('/dashboard', async (_req, res) => {
   try {
     const totalDonors = await prisma.donor.count({ where: { status: 'ACTIVE' } });
     
@@ -41,11 +41,33 @@ router.get('/dashboard', async (req, res) => {
     const smsSent = await prisma.birthdayMessage.count({ where: { status: 'SENT' } });
     const smsFailed = await prisma.birthdayMessage.count({ where: { status: 'FAILED' } });
 
+    // Compute today's birthdays so Dashboard KPI card is accurate
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentDay = today.getDate();
+
+    const [donorsWithDob, familyWithDob] = await Promise.all([
+      prisma.donor.findMany({
+        where: { status: 'ACTIVE', dob: { not: null } },
+        select: { id: true, fullName: true, mobile: true, dob: true }
+      }),
+      prisma.familyMember.findMany({
+        where: { status: 'ACTIVE', dob: { not: null } },
+        select: { id: true, fullName: true, mobile: true, dob: true, relationship: true }
+      })
+    ]);
+
+    const upcomingBirthdays = [
+      ...donorsWithDob.filter(d => d.dob && d.dob.getMonth() === currentMonth && d.dob.getDate() === currentDay).map(d => ({ ...d, type: 'DONOR' })),
+      ...familyWithDob.filter(f => f.dob && f.dob.getMonth() === currentMonth && f.dob.getDate() === currentDay).map(f => ({ ...f, type: 'FAMILY' }))
+    ];
+
     res.json({
       totalDonors,
       totalDonationsAmount,
       categories: { platinum, gold, silver, sudama },
-      smsStats: { sent: smsSent, failed: smsFailed }
+      smsStats: { sent: smsSent, failed: smsFailed },
+      upcomingBirthdays
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch dashboard data' });

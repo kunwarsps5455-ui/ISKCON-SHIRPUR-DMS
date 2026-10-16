@@ -28,7 +28,7 @@ router.get('/audit-logs', async (req, res) => {
 });
 
 // === SETTINGS ===
-router.get('/settings', async (req, res) => {
+router.get('/settings', async (_req, res) => {
   try {
     const settings = await prisma.systemSetting.findMany();
     const config = settings.reduce((acc, curr) => ({ ...acc, [curr.key]: curr.value }), {});
@@ -58,7 +58,7 @@ router.put('/settings', logAudit('UPDATE_SETTINGS', 'SystemSetting'), async (req
 });
 
 // === USERS (CHECKERS) ===
-router.get('/users', async (req, res) => {
+router.get('/users', async (_req, res) => {
   try {
     const users = await prisma.user.findMany({
       select: { id: true, name: true, email: true, role: true, active: true, lastLoginAt: true }
@@ -94,11 +94,12 @@ router.post('/users', logAudit('CREATE_USER', 'User'), async (req: AuthRequest, 
 
 router.patch('/users/:id/status', logAudit('UPDATE_USER_STATUS', 'User'), async (req: AuthRequest, res) => {
   try {
+    const id = String(req.params.id);
     const { active } = req.body;
     
     // Prevent disabling the last admin
     if (!active) {
-      const user = await prisma.user.findUnique({ where: { id: req.params.id } });
+      const user = await prisma.user.findUnique({ where: { id } });
       if (user?.role === 'ADMIN') {
         const activeAdmins = await prisma.user.count({ where: { role: 'ADMIN', active: true } });
         if (activeAdmins <= 1) {
@@ -108,7 +109,7 @@ router.patch('/users/:id/status', logAudit('UPDATE_USER_STATUS', 'User'), async 
     }
 
     const updated = await prisma.user.update({
-      where: { id: req.params.id },
+      where: { id },
       data: { active },
       select: { id: true, name: true, email: true, role: true, active: true }
     });

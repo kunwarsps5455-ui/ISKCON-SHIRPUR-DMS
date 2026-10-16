@@ -1,9 +1,11 @@
 import { Router } from 'express';
 import { prisma } from '../db.js';
-import { authenticate, requireAdmin } from '../middleware/auth.js';
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth.js';
+// @ts-ignore - multer does not ship bundled types
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { logAudit } from '../middleware/audit.js';
+import { generateNextDonorId } from './donors.js';
 
 const router = Router();
 router.use(authenticate);
@@ -11,7 +13,7 @@ router.use(requireAdmin);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-router.post('/donors', upload.single('file'), logAudit('IMPORT_DONORS', 'Donor'), async (req, res) => {
+router.post('/donors', upload.single('file'), logAudit('IMPORT_DONORS', 'Donor'), async (req: AuthRequest & { file?: { buffer: Buffer } }, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
@@ -43,8 +45,7 @@ router.post('/donors', upload.single('file'), logAudit('IMPORT_DONORS', 'Donor')
           if (!isNaN(parsedDate.getTime())) dob = parsedDate;
         }
 
-        const count = await prisma.donor.count();
-        const donorId = `ISK-${String(count + 1).padStart(6, '0')}`;
+        const donorId = await generateNextDonorId();
 
         await prisma.donor.create({
           data: {

@@ -4,111 +4,168 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = "file:./dev.db"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id           String   @id @default(uuid())
+  id           String    @id @default(uuid())
   name         String
-  email        String   @unique
+  email        String    @unique
   passwordHash String
-  role         String   // ADMIN, CHECKER
-  active       Boolean  @default(true)
+  role         String    // ADMIN, CHECKER
+  active       Boolean   @default(true)
   lastLoginAt  DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Donor {
-  id            String   @id @default(uuid())
-  donorId       String   @unique // ISK-000001
-  fullName      String
-  dob           DateTime?
-  gender        String?
-  mobile        String?
-  email         String?
-  address       String?
-  city          String?
-  state         String?
-  pincode       String?
-  smsPermission String   @default("UNKNOWN") // ALLOWED, NOT_ALLOWED, UNKNOWN
-  status        String   @default("ACTIVE") // ACTIVE, ARCHIVED
-  notes         String?
-  createdBy     String
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  donorId            String    @unique // ISK-000001
+  fullName           String
+  dob                DateTime?
+  gender             String?
+  mobile             String?
+  email              String?
+  address            String?
+  city               String?
+  state              String?
+  pincode            String?
+  stage              String    @default("REGULAR") // PROSPECT, FIRST_TIME, REGULAR, PATRON, LIFE_PATRON, LAPSED
+  preferredChannel   String    @default("WHATSAPP") // WHATSAPP, SMS
+  whatsappPermission String    @default("ALLOWED") // ALLOWED, NOT_ALLOWED, UNKNOWN
+  smsPermission      String    @default("UNKNOWN") // ALLOWED, NOT_ALLOWED, UNKNOWN
+  status             String    @default("ACTIVE") // ACTIVE, ARCHIVED
+  notes              String?
+  createdBy          String
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  donations     Donation[]
-  familyMembers FamilyMember[]
-  birthdayMessages BirthdayMessage[]
+  donations          Donation[]
+  familyMembers      FamilyMember[]
+  birthdayMessages   BirthdayMessage[]
+  interactions       Interaction[]
+  crmTasks           CrmTask[]
 }
 
 model Donation {
-  id                   String   @id @default(uuid())
-  donationId           String   @unique // DON-000001
+  id                   String    @id @default(uuid())
+  donationId           String    @unique // DON-000001
   donorId              String
   amount               Float
   donationDate         DateTime
-  paymentMethod        String   // CASH, UPI, BANK_TRANSFER, CHEQUE, CARD, OTHER
+  paymentMethod        String    // CASH, UPI, BANK_TRANSFER, CHEQUE, CARD, OTHER
   transactionReference String?
   purpose              String?
   notes                String?
-  status               String   @default("VALID") // VALID, VOIDED
+  status               String    @default("VALID") // VALID, VOIDED
+  receiptSent          Boolean   @default(false)
+  receiptChannel       String?   // WHATSAPP, SMS
   createdBy            String
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
-  donor                Donor    @relation(fields: [donorId], references: [id])
+  donor                Donor     @relation(fields: [donorId], references: [id], onDelete: Cascade)
 }
 
 model FamilyMember {
-  id            String   @id @default(uuid())
-  donorId       String
-  fullName      String
-  relationship  String
-  dob           DateTime?
-  mobile        String?
-  email         String?
-  smsPermission String   @default("UNKNOWN")
-  status        String   @default("ACTIVE")
-  notes         String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String    @id @default(uuid())
+  donorId            String
+  fullName           String
+  relationship       String
+  dob                DateTime?
+  mobile             String?
+  email              String?
+  whatsappPermission String    @default("ALLOWED") // ALLOWED, NOT_ALLOWED, UNKNOWN
+  smsPermission      String    @default("UNKNOWN") // ALLOWED, NOT_ALLOWED, UNKNOWN
+  status             String    @default("ACTIVE")
+  notes              String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
-  donor         Donor    @relation(fields: [donorId], references: [id])
+  donor              Donor     @relation(fields: [donorId], references: [id], onDelete: Cascade)
 }
 
 model BirthdayMessage {
-  id                String   @id @default(uuid())
-  personType        String   // DONOR, FAMILY_MEMBER
+  id                String    @id @default(uuid())
+  personType        String    // DONOR, FAMILY_MEMBER
   personId          String
   donorId           String?
   birthdayDate      DateTime
   birthdayYear      Int
-  channel           String   // SMS
+  channel           String    @default("WHATSAPP") // WHATSAPP, SMS
   recipient         String
   message           String
   templateId        String?
   provider          String?
   providerMessageId String?
-  status            String   // PENDING, QUEUED, SENT, DELIVERED, FAILED, SKIPPED, REJECTED
+  status            String    // PENDING, QUEUED, SENT, DELIVERED, READ, FAILED, SKIPPED, REJECTED
   sentAt            DateTime?
   deliveredAt       DateTime?
   failureReason     String?
   createdBy         String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
-  donor             Donor?   @relation(fields: [donorId], references: [id])
+  donor             Donor?    @relation(fields: [donorId], references: [id], onDelete: SetNull)
 
   @@unique([personId, birthdayYear, channel])
+}
+
+model Interaction {
+  id              String    @id @default(uuid())
+  donorId         String
+  type            String    // PHONE_CALL, TEMPLE_VISIT, MEETING, WHATSAPP, PRASADAM_SEVA, NOTE
+  subject         String
+  notes           String?
+  outcome         String?
+  interactionDate DateTime  @default(now())
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  donor           Donor     @relation(fields: [donorId], references: [id], onDelete: Cascade)
+}
+
+model CrmTask {
+  id          String    @id @default(uuid())
+  donorId     String?
+  title       String
+  description String?
+  dueDate     DateTime?
+  priority    String    @default("MEDIUM") // LOW, MEDIUM, HIGH, URGENT
+  status      String    @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  assignedTo  String?
+  completedAt DateTime?
+  createdBy   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  donor       Donor?    @relation(fields: [donorId], references: [id], onDelete: SetNull)
+}
+
+model WhatsAppLog {
+  id             String    @id @default(uuid())
+  recipientPhone String
+  donorId        String?
+  messageType    String    @default("TEMPLATE") // TEMPLATE, TEXT
+  templateName   String?
+  content        String?
+  metaMessageId  String?   @unique
+  status         String    @default("PENDING") // PENDING, SENT, DELIVERED, READ, FAILED
+  errorDetails   String?
+  sentAt         DateTime?
+  deliveredAt    DateTime?
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model MessageTemplate {
   id        String   @id @default(uuid())
   name      String
   language  String   @default("HI")
-  channel   String   @default("SMS")
+  channel   String   @default("WHATSAPP") // WHATSAPP, SMS
   message   String
   active    Boolean  @default(true)
   isDefault Boolean  @default(false)

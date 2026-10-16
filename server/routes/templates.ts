@@ -7,7 +7,7 @@ const router = Router();
 router.use(authenticate);
 
 // Get templates
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const templates = await prisma.messageTemplate.findMany({
       orderBy: { createdAt: 'desc' }
@@ -56,17 +56,18 @@ router.post('/', logAudit('CREATE_TEMPLATE', 'MessageTemplate'), async (req: Aut
 
 router.put('/:id', logAudit('UPDATE_TEMPLATE', 'MessageTemplate'), async (req: AuthRequest, res) => {
   try {
+    const id = String(req.params.id);
     const { name, language, channel, message, isDefault, active } = req.body;
     
     if (isDefault) {
       await prisma.messageTemplate.updateMany({
-        where: { id: { not: req.params.id }, isDefault: true },
+        where: { id: { not: id }, isDefault: true },
         data: { isDefault: false }
       });
     }
 
     const updated = await prisma.messageTemplate.update({
-      where: { id: req.params.id },
+      where: { id },
       data: {
         name,
         language,

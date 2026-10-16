@@ -5,7 +5,7 @@ export interface SMSResponse {
   status: 'QUEUED' | 'SENT' | 'DELIVERED' | 'FAILED' | 'REJECTED';
 }
 
-export async function sendSMS(mobile: string, message: string): Promise<SMSResponse> {
+export async function sendSMS(_mobile: string, _message: string): Promise<SMSResponse> {
   const provider = process.env.SMS_PROVIDER;
   
   if (!provider || provider === 'dummy' || provider === 'not-configured') {

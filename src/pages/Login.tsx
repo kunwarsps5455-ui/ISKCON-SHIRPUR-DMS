@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
+import IskconLogo from '../components/IskconLogo';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -16,7 +17,7 @@ export default function Login() {
 
     try {
       const res = await api.post('/auth/login', { email, password });
-      login(res.data.user);
+      login(res.data.user, res.data.token);
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to login');
     } finally {
@@ -28,8 +29,8 @@ export default function Login() {
     <div className="min-h-screen bg-cream flex flex-col justify-center py-12 sm:px-6 lg:px-8 bg-[url('https://www.transparenttextures.com/patterns/cream-pixels.png')]">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
-          <div className="w-20 h-20 bg-saffron-500 rounded-full flex items-center justify-center shadow-lg shadow-saffron-500/30">
-             <span className="text-3xl font-bold text-white">ISK</span>
+          <div className="w-24 h-24 saffron-gradient rounded-2xl overflow-hidden p-3 flex items-center justify-center shadow-lg shadow-saffron-500/30 border border-amber-300/40">
+            <IskconLogo className="w-full h-full drop-shadow" variant="white" />
           </div>
         </div>
         <h2 className="mt-6 text-center text-3xl font-extrabold text-temple-900">

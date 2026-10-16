@@ -1,0 +1,50 @@
+# ============================================================================
+# RENDER DEPLOYMENT BLUEPRINT: ISKCON SHIRPUR DMS & CRM
+# ============================================================================
+# Connect your GitHub repository to Render (dashboard.render.com).
+# Render will automatically detect this blueprint and configure your service.
+# ============================================================================
+
+services:
+  # 1. Unified Web Service (Express API + Vite React Frontend)
+  - type: web
+    name: iskcon-shirpur-dms
+    env: node
+    plan: free # or starter
+    region: singapore # Closest low-latency region to India
+    buildCommand: npm install && npx prisma generate && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: TIMEZONE
+        value: Asia/Kolkata
+      - key: DATABASE_URL
+        sync: false # Set in Render Dashboard: Supabase Transaction Pooler URL (port 6543)
+      - key: DIRECT_URL
+        sync: false # Set in Render Dashboard: Supabase Direct URL (port 5432)
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: META_PHONE_NUMBER_ID
+        sync: false
+      - key: META_ACCESS_TOKEN
+        sync: false
+      - key: META_WABA_ID
+        sync: false
+      - key: META_WEBHOOK_VERIFY_TOKEN
+        value: iskcon_shirpur_verify_token_2026
+      - key: WHATSAPP_MODE
+        value: production
+      - key: CRON_SECRET
+        generateValue: true
+
+  # 2. Render Cron Job (Optional: Automated 15-Minute Ping to keep alive & refresh)
+  - type: cron
+    name: iskcon-dms-15min-sync
+    env: node
+    plan: starter
+    schedule: "*/15 * * * *"
+    buildCommand: "echo 'Starting ping'"
+    startCommand: "curl -s -f https://iskcon-shirpur-dms.onrender.com/api/cron/refresh-15min || exit 0"
