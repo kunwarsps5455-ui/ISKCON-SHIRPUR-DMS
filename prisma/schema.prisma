@@ -1,0 +1,141 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String   // ADMIN, CHECKER
+  active       Boolean  @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Donor {
+  id            String   @id @default(uuid())
+  donorId       String   @unique // ISK-000001
+  fullName      String
+  dob           DateTime?
+  gender        String?
+  mobile        String?
+  email         String?
+  address       String?
+  city          String?
+  state         String?
+  pincode       String?
+  smsPermission String   @default("UNKNOWN") // ALLOWED, NOT_ALLOWED, UNKNOWN
+  status        String   @default("ACTIVE") // ACTIVE, ARCHIVED
+  notes         String?
+  createdBy     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  donations     Donation[]
+  familyMembers FamilyMember[]
+  birthdayMessages BirthdayMessage[]
+}
+
+model Donation {
+  id                   String   @id @default(uuid())
+  donationId           String   @unique // DON-000001
+  donorId              String
+  amount               Float
+  donationDate         DateTime
+  paymentMethod        String   // CASH, UPI, BANK_TRANSFER, CHEQUE, CARD, OTHER
+  transactionReference String?
+  purpose              String?
+  notes                String?
+  status               String   @default("VALID") // VALID, VOIDED
+  createdBy            String
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  donor                Donor    @relation(fields: [donorId], references: [id])
+}
+
+model FamilyMember {
+  id            String   @id @default(uuid())
+  donorId       String
+  fullName      String
+  relationship  String
+  dob           DateTime?
+  mobile        String?
+  email         String?
+  smsPermission String   @default("UNKNOWN")
+  status        String   @default("ACTIVE")
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  donor         Donor    @relation(fields: [donorId], references: [id])
+}
+
+model BirthdayMessage {
+  id                String   @id @default(uuid())
+  personType        String   // DONOR, FAMILY_MEMBER
+  personId          String
+  donorId           String?
+  birthdayDate      DateTime
+  birthdayYear      Int
+  channel           String   // SMS
+  recipient         String
+  message           String
+  templateId        String?
+  provider          String?
+  providerMessageId String?
+  status            String   // PENDING, QUEUED, SENT, DELIVERED, FAILED, SKIPPED, REJECTED
+  sentAt            DateTime?
+  deliveredAt       DateTime?
+  failureReason     String?
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  donor             Donor?   @relation(fields: [donorId], references: [id])
+
+  @@unique([personId, birthdayYear, channel])
+}
+
+model MessageTemplate {
+  id        String   @id @default(uuid())
+  name      String
+  language  String   @default("HI")
+  channel   String   @default("SMS")
+  message   String
+  active    Boolean  @default(true)
+  isDefault Boolean  @default(false)
+  createdBy String?
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String
+  userName   String
+  userRole   String
+  action     String
+  entityType String
+  entityId   String
+  oldData    String?  // JSON string
+  newData    String?  // JSON string
+  metadata   String?  // JSON string (IP, etc.)
+  createdAt  DateTime @default(now())
+}
+
+model SystemSetting {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  updatedBy String
+  updatedAt DateTime @updatedAt
+}
