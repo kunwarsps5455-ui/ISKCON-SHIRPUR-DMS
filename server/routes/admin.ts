@@ -121,4 +121,34 @@ router.patch('/users/:id/status', logAudit('UPDATE_USER_STATUS', 'User'), async 
   }
 });
 
+router.delete('/users/:id', logAudit('DELETE_USER', 'User'), async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.params.id);
+
+    if (req.user?.id === id) {
+      return res.status(400).json({ error: 'You cannot delete your own currently logged-in account' });
+    }
+
+    const targetUser = await prisma.user.findUnique({ where: { id } });
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (targetUser.role === 'ADMIN') {
+      const adminCount = await prisma.user.count({ where: { role: 'ADMIN' } });
+      if (adminCount <= 1) {
+        return res.status(400).json({ error: 'Cannot delete the last Admin account' });
+      }
+    }
+
+    await prisma.user.delete({ where: { id } });
+
+    res.locals.entityId = id;
+    res.locals.auditOldData = { name: targetUser.name, email: targetUser.email, role: targetUser.role };
+    res.json({ success: true, message: 'User removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete user' });
+  }
+});
+
 export default router;

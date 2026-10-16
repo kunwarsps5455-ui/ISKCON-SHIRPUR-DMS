@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
-import { UserPlus, UserCog, X } from 'lucide-react';
+import { UserPlus, UserCog, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Users() {
@@ -44,6 +44,20 @@ export default function Users() {
       fetchUsers();
     } catch (error: any) {
       alert(error.response?.data?.error || "Failed to update user status");
+    }
+  };
+
+  const handleDeleteUser = async (targetUser: any) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently remove ${targetUser.role} "${targetUser.name}" (${targetUser.email})?`
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/users/${targetUser.id}`);
+      fetchUsers();
+    } catch (error: any) {
+      alert(error.response?.data?.error || "Failed to remove user");
     }
   };
 
@@ -117,13 +131,29 @@ export default function Users() {
                       {u.lastLoginAt ? format(new Date(u.lastLoginAt), 'dd MMM yyyy, HH:mm') : 'Never'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap font-medium">
-                      {u.email !== user?.email && (
-                        <button 
-                          onClick={() => handleToggleStatus(u.id, u.active)}
-                          className={`font-semibold ${u.active ? 'text-red-600 hover:text-red-800' : 'text-emerald-600 hover:text-emerald-800'}`}
-                        >
-                          {u.active ? 'Deactivate' : 'Activate'}
-                        </button>
+                      {u.email !== user?.email ? (
+                        <div className="flex items-center gap-3">
+                          <button 
+                            onClick={() => handleToggleStatus(u.id, u.active)}
+                            className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold transition-colors ${
+                              u.active
+                                ? 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                                : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            }`}
+                          >
+                            {u.active ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(u)}
+                            title="Permanently remove user"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-red-200 bg-red-50 text-red-700 hover:bg-red-100 text-[11px] font-semibold transition-colors"
+                          >
+                            <Trash2 size={12} />
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 italic">Current Session</span>
                       )}
                     </td>
                   </tr>
