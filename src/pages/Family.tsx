@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { Baby, Search } from 'lucide-react';
+import { Baby, Search, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function Family() {
@@ -38,6 +38,21 @@ export default function Family() {
       fetchFamily();
     } catch (error) {
       alert('Failed to update messaging permission');
+    }
+  };
+
+  const handleDeleteFamilyMember = async (f: any) => {
+    if (user?.role !== 'ADMIN') return;
+    const confirmed = window.confirm(
+      `Are you sure you want to remove family member "${f.fullName}" (${f.relationship})? This will stop all automated wishes.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/family/${f.id}`);
+      fetchFamily();
+    } catch (error: any) {
+      alert(error.response?.data?.error || 'Failed to remove family member');
     }
   };
 
@@ -108,18 +123,29 @@ export default function Family() {
                         </Link>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <button
-                          onClick={() => handleToggleMessaging(f.id, f.whatsappPermission)}
-                          disabled={user?.role !== 'ADMIN'}
-                          className={`px-3 py-1 text-xs font-bold rounded-full transition-all border ${
-                            isAllowed
-                              ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
-                              : 'bg-red-50 text-red-800 border-red-200 hover:bg-red-100'
-                          } ${user?.role !== 'ADMIN' ? 'opacity-70 cursor-default' : ''}`}
-                          title={user?.role === 'ADMIN' ? 'Click to toggle automated birthday and festival wishes for this family member' : 'Admin permission required to toggle'}
-                        >
-                          {isAllowed ? '✓ Enabled' : '✕ Disabled'}
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => handleToggleMessaging(f.id, f.whatsappPermission)}
+                            disabled={user?.role !== 'ADMIN'}
+                            className={`px-3 py-1 text-xs font-bold rounded-full transition-all border ${
+                              isAllowed
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+                                : 'bg-red-50 text-red-800 border-red-200 hover:bg-red-100'
+                            } ${user?.role !== 'ADMIN' ? 'opacity-70 cursor-default' : ''}`}
+                            title={user?.role === 'ADMIN' ? 'Click to toggle automated birthday and festival wishes for this family member' : 'Admin permission required to toggle'}
+                          >
+                            {isAllowed ? '✓ Enabled' : '✕ Disabled'}
+                          </button>
+                          {user?.role === 'ADMIN' && (
+                            <button
+                              onClick={() => handleDeleteFamilyMember(f)}
+                              className="text-red-400 hover:text-red-600 transition-colors p-1 rounded hover:bg-red-50"
+                              title="Delete family member"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );

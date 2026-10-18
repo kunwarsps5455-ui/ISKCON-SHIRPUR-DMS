@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 import WhatsAppModal from '../components/WhatsAppModal';
@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   Edit,
   Plus,
+  Trash2,
   HeartHandshake,
   Baby,
   History,
@@ -21,6 +22,7 @@ import { format } from 'date-fns';
 
 export default function DonorProfile() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [donor, setDonor] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -215,6 +217,37 @@ export default function DonorProfile() {
     }
   };
 
+  const handleDeleteFamilyMember = async (fam: any) => {
+    if (user?.role !== 'ADMIN') return;
+    const confirmed = window.confirm(
+      `Are you sure you want to remove family member "${fam.fullName}" (${fam.relationship})? This will stop all automated wishes for them.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/family/${fam.id}`);
+      fetchDonor();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to remove family member');
+    }
+  };
+
+  const handleDeleteDonor = async () => {
+    if (!donor) return;
+    const confirmed = window.confirm(
+      `⚠️ PERMANENT DELETION:\n\nAre you sure you want to permanently delete devotee "${donor.fullName}" (${donor.donorId})?\n\nThis will remove their profile, family members, donations, and completely stop all automated WhatsApp messages. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/donors/${donor.id}`);
+      alert(`Devotee ${donor.fullName} has been removed. All WhatsApp messaging has ceased.`);
+      navigate('/donors');
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete donor');
+    }
+  };
+
   if (loading) return <div className="p-16 text-center text-slate-500 font-medium">Loading Devotee Profile...</div>;
   if (!donor) return <div className="p-16 text-center text-red-500 font-bold">Donor record not found</div>;
 
@@ -288,6 +321,14 @@ export default function DonorProfile() {
               >
                 <Plus size={15} className="mr-1.5" />
                 Record Donation
+              </button>
+              <button
+                onClick={handleDeleteDonor}
+                className="flex items-center px-3.5 py-2 bg-white hover:bg-red-50 border border-red-200 text-red-600 text-xs font-semibold rounded-xl shadow-sm transition-all"
+                title="Permanently Delete Devotee from Database"
+              >
+                <Trash2 size={14} className="mr-1 text-red-500" />
+                Delete Devotee
               </button>
             </>
           )}
@@ -522,19 +563,31 @@ export default function DonorProfile() {
                 <div key={fam.id} className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1.5">
                   <div className="flex justify-between items-center">
                     <p className="font-bold text-sm text-slate-900">{fam.fullName}</p>
-                    <button
-                      type="button"
-                      disabled={user?.role !== 'ADMIN'}
-                      onClick={() => handleToggleFamilyPermission(fam.id, fam.whatsappPermission)}
-                      title={user?.role === 'ADMIN' ? 'Click to toggle Automated Birthday & Festival WhatsApp Wishes' : undefined}
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
-                        fam.whatsappPermission === 'NOT_ALLOWED'
-                          ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-                      }`}
-                    >
-                      {fam.whatsappPermission === 'NOT_ALLOWED' ? 'Auto-Wishes Opted Out' : '✓ Auto-Wishes ON (Birthdays & Festivals)'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={user?.role !== 'ADMIN'}
+                        onClick={() => handleToggleFamilyPermission(fam.id, fam.whatsappPermission)}
+                        title={user?.role === 'ADMIN' ? 'Click to toggle Automated Birthday & Festival WhatsApp Wishes' : undefined}
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border transition-colors ${
+                          fam.whatsappPermission === 'NOT_ALLOWED'
+                            ? 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                        }`}
+                      >
+                        {fam.whatsappPermission === 'NOT_ALLOWED' ? 'Auto-Wishes Opted Out' : '✓ Auto-Wishes ON (Birthdays & Festivals)'}
+                      </button>
+                      {user?.role === 'ADMIN' && (
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteFamilyMember(fam)}
+                          className="text-red-400 hover:text-red-600 p-1 rounded hover:bg-red-50 transition-colors"
+                          title="Remove family member"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <p className="text-slate-500">Relationship: <span className="font-semibold text-slate-700">{fam.relationship}</span></p>
                   <p className="text-slate-500">DOB: <span className="font-semibold text-slate-700">{fam.dob ? format(new Date(fam.dob), 'dd MMM yyyy') : 'Not Recorded'}</span></p>

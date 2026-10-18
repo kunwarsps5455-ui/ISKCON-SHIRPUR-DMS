@@ -136,4 +136,33 @@ router.patch('/:id/messaging-permission', requireAdmin, async (req: AuthRequest,
   }
 });
 
+// Delete Family Member (Admin only)
+router.delete('/:id', requireAdmin, logAudit('DELETE_FAMILY_MEMBER', 'FamilyMember'), async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.params.id);
+    const existing = await prisma.familyMember.findUnique({ where: { id } });
+    if (!existing) {
+      return res.status(404).json({ error: 'Family member not found' });
+    }
+
+    // Delete any pending birthday messages for this family member
+    await prisma.birthdayMessage.deleteMany({
+      where: { personId: id }
+    }).catch(() => {});
+
+    await prisma.familyMember.delete({ where: { id } });
+
+    res.locals.entityId = id;
+    res.locals.auditOldData = {
+      fullName: existing.fullName,
+      relationship: existing.relationship,
+      donorId: existing.donorId
+    };
+
+    res.json({ success: true, message: 'Family member removed successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete family member' });
+  }
+});
+
 export default router;

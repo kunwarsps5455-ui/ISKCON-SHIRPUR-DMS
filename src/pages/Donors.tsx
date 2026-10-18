@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import api, { downloadFile } from '../services/api';
-import { Search, Plus, Download, Upload } from 'lucide-react';
+import { Search, Plus, Download, Upload, Trash2 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useRef } from 'react';
 
@@ -81,6 +81,20 @@ export default function Donors() {
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteDonor = async (donor: any) => {
+    const confirmed = window.confirm(
+      `⚠️ PERMANENT DELETION:\n\nAre you sure you want to permanently delete donor "${donor.fullName}" (${donor.donorId})?\n\nThis will remove their profile, family members, donations, and completely stop all automated WhatsApp messages. This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    try {
+      await api.delete(`/donors/${donor.id}`);
+      fetchDonors();
+    } catch (err: any) {
+      alert(err.response?.data?.error || 'Failed to delete donor');
     }
   };
 
@@ -194,7 +208,20 @@ export default function Donors() {
                       {donor.mobile || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <Link to={`/donors/${donor.id}`} className="text-indigo-600 hover:text-indigo-900">View Profile</Link>
+                      <div className="flex items-center space-x-3">
+                        <Link to={`/donors/${donor.id}`} className="text-indigo-600 hover:text-indigo-900">
+                          View
+                        </Link>
+                        {user?.role === 'ADMIN' && (
+                          <button
+                            onClick={() => handleDeleteDonor(donor)}
+                            className="text-red-500 hover:text-red-700 transition-colors p-1 rounded hover:bg-red-50"
+                            title="Delete donor from database"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

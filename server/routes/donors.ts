@@ -249,4 +249,61 @@ router.put('/:id', requireAdmin, logAudit('UPDATE_DONOR', 'Donor'), async (req: 
   }
 });
 
+// Delete Donor (Admin only)
+router.delete('/:id', requireAdmin, logAudit('DELETE_DONOR', 'Donor'), async (req: AuthRequest, res) => {
+  try {
+    const id = String(req.params.id);
+    const donor = await prisma.donor.findUnique({
+      where: { id },
+      include: {
+        familyMembers: true
+      }
+    });
+
+    if (!donor) {
+      return res.status(404).json({ error: 'Donor not found' });
+    }
+
+    // Delete associated pending/queued birthday messages for donor and family members
+    const familyMemberIds = donor.familyMembers.map(f => f.id);
+    const allPersonIds = [id, ...familyMemberIds];
+
+    await prisma.birthdayMessage.deleteMany({
+      where: {
+        OR: [
+          { donorId: id },
+          { personId: { in: allPersonIds } }
+        ]
+      }
+    }).catch(() => {});
+
+    // Delete associated CRM tasks for this donor
+    await prisma.crmTask.deleteMany({
+      where: { donorId: id }
+    }).catch(() => {});
+
+    // Delete the donor (cascades donations, familyMembers, interactions)
+    await prisma.donor.delete({
+      where: { id }
+    });
+
+    res.locals.entityId = id;
+    res.locals.auditOldData = {
+      donorId: donor.donorId,
+      fullName: donor.fullName,
+      mobile: donor.mobile,
+      email: donor.email,
+      whatsappPermission: donor.whatsappPermission
+    };
+
+    res.json({
+      success: true,
+      message: `Donor ${donor.fullName} (${donor.donorId}) and associated records deleted permanently. WhatsApp messaging ceased.`
+    });
+  } catch (error) {
+    console.error('Failed to delete donor:', error);
+    res.status(500).json({ error: 'Failed to delete donor' });
+  }
+});
+
 export default router;
